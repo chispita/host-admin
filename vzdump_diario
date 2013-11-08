@@ -1,0 +1,234 @@
+#!/usr/bin/php
+<?php
+
+/*
+ * Hace un volcado de todos los VEs del nodo y los archiva
+ * por fechas.
+ *
+ * Borra los que sean más viejos de una semana.
+ *
+ */
+
+# Includes:
+require("/usr/local/admin/include/vzinc/BorraRecDir.inc.php");
+require("/usr/local/admin/include/vzinc/config.inc.php");
+#define variables
+# Config:
+define("TIME", time());					// Unix-timestamp actual.
+define("LOGFILE", "/var/log/vzdump.log");			// Fichero donde se guardará el último log.
+define("DUMPDIR", "/backup/remoto/".ESTE_NODO."-vzdump");	// Directorio de volcados.
+define("CADUCIDAD_DIAS", 28);              		// Días en los que caduca un volcado. Será borrado en CADUCIDAD + 1.
+define("DUMPOPCS", "--stdexcludes --compress --suspend");	// Opciones para vzdump.
+define("VZDUMP_EXCLUDES", "/usr/local/admin/vzdump_excludes");
+
+# Constantes:
+define("SALIR", true);
+define("CONTINUAR", false);
+
+# Poner aviso "en proceso" para Nagios:
+registro("CUR", "EN CURSO.");
+
+# Cálculos:
+$FechaActual       = date("dmY", TIME);
+$HoraActual        = date("His", TIME);
+$DirVolcado        = DUMPDIR.DIRECTORY_SEPARATOR."vzdump-".$FechaActual."_".$HoraActual; // Dir volcado actual.
+$SegundosCaducidad = CADUCIDAD_DIAS * 24 * 60 * 60;
+$LimiteCaducidad   = TIME - $SegundosCaducidad;
+
+# Comprobando que esté montada la unidad de backup:
+echo "> Comprobando unidad de backup...";
+if(strpos(file_get_contents("/proc/mounts"), "/backup") === false)
+{
+	echo "ERROR\n";
+	error("La unidad de backup no está montada.", true);
+}
+else
+{
+	echo "OK\n";
+}
+
+# Vemos que exista el directorio de backups:
+echo "> Comprobando directorio de backup...";
+if(!file_exists(DUMPDIR))
+{
+	echo "ERROR\n";
+	error("No existe directorio de backup: ".DUMPDIR, true);
+}
+else
+{
+	echo "OK\n";
+}
+
+
+# Borrar los dumps más viejos de una semana.
+echo "> Borrando backups más viejos de ".CADUCIDAD_DIAS." días...\n";
+echo "  Límite de caducidad en ".date("H:i:s@d/m/Y", $LimiteCaducidad).".\n";
+
+$aDirs = scandir(DUMPDIR);
+
+foreach($aDirs as $dir)
+{
+	if($dir == "." or $dir == "..")
+	{
+		continue;
+	}
+	echo "  - ".$dir.": ";
+	if(is_dir(DUMPDIR.DIRECTORY_SEPARATOR.$dir) and ereg("^vzdump\-([0-9]{8})\_([0-9]{6})$", $dir))
+	{
+		ereg("^vzdump\-([0-9]{8})\_([0-9]{6})$", $dir, $aCachos);
+		$fecha    = $aCachos[1];
+		$dia      = substr($fecha, 0, 2);
+		$mes      = substr($fecha, 2, 2);
+		$año      = substr($fecha, 4, 4);
+		$hora     = $aCachos[2];
+		$horas    = substr($hora, 0, 2);
+		$minutos  = substr($hora, 2, 2);
+		$segundos = substr($hora, 4, 2);
+		
+		# ¿Fecha correcta?
+		if(!checkdate($mes, $dia, $año))
+		{
+			echo "Fecha ".$dia."-".$mes."-".$año." incorrecta.\n";
+		}
+		else
+		{
+			# ¿Es más viejo de CADUCIDAD días?
+			$TimeEsteDir = strtotime($año."-".$mes."-".$dia) + ($horas * 60 * 60) + ($minutos * 60) + $segundos;
+			if($TimeEsteDir < $LimiteCaducidad)
+			{
+				echo "Caducado...Borrando.\n";
+				if(!BorraRecDir(DUMPDIR.DIRECTORY_SEPARATOR.$dir))
+				{
+					error("borrando $dir.\n", CONTINUAR);
+				}
+			}
+			else
+			{
+				echo "Mantener.\n";
+			}
+		}
+	}
+	else
+	{
+		echo "Desconocido.\n";
+	}
+}
+
+# Crear un directorio para este volcado:
+echo "> Creando directorio de volcado (".$DirVolcado.")...\n";
+mkdir($DirVolcado, 0700) or error("Creando dir.\n", SALIR);
+
+
+if($_SERVER['argc'] > 1)
+{
+	# Se especifica un VE.
+	# Sólo se volcará ese VE.
+	$aVEs = array($_SERVER['argv'][1]);
+	echo "> Volcar sólo VE ".$aVEs[0]."...";
+}
+else
+{
+	# Listar VEs de este nodo:
+	echo "> Listando VEs...";
+	#echo CMD_VZLIST." --all --no-header --output veid|tr -d ' '\n";
+
+	exec(CMD_VZLIST." --no-header --output veid|tr -d ' '", $aVEs, $nivel);
+
+	if($nivel > 0)
+	{
+		error("Listando VEs.\n", SALIR);
+	}
+        elseif(empty($aVEs))
+        {
+                error("¿No hay containers?\n", SALIR);
+	}
+	else
+	{
+		foreach($aVEs as $VeId)
+		{	
+			echo $VeId;
+		}
+	}
+}	
+
+echo "\n";
+
+# Volcar cada VE:
+echo "> Volcando VEs:\n";
+foreach($aVEs as $VeId)
+{
+	echo "  - ".$VeId.":\n";
+	if( ignore_server($VeId))
+	{
+		echo " Ignorando servidor\n";}
+	else{
+          exec(CMD_VZDUMP." ".DUMPOPCS." --dumpdir ".$DirVolcado." ".$VeId, $aSalida, $nivel);
+	  if($nivel != 0)
+	  {
+		echo $VeId."-> ";
+		error($nivel.") volcando VE ".$VeId.".\n", CONTINUAR);
+	  }
+	  else
+	  {
+		echo $VeId."-> Volcado OK.\n";
+	  }
+	}
+}
+
+# Salir:
+salir(0);
+
+# Funciones:
+function salir($nivel)
+{
+	global $aErrores;
+	
+	echo "\nFinalizado.\n";
+	if(!empty($aErrores))
+	{
+		print_r($aErrores);
+		registro("FALLO", "FINALIZADO CON ERRORES:\n".print_r($aErrores, true));
+	}
+	else
+	{
+		# Finalizado correctamente:
+		registro("OK", "FINALIZADO OK.");
+	}
+	exit($nivel);
+}
+
+function error($error, $salir=false)
+{
+	global $aErrores;
+	
+	echo "ERROR: ".$error."\n";
+	$aErrores[] = $error;
+	if($salir)
+	{
+		registro("FALLO", "ABORTADO POR ERROR CRÍTICO:\n".print_r($aErrores, true));
+		exit(255);
+	}
+	return $aErrores;
+}
+
+function registro($estado = "OK", $texto)
+{
+		file_put_contents(LOGFILE, "[".time().":".$estado."] ".date("H:i:s@d-m-Y", time())." ".$texto."\n");
+}
+
+
+# Comprueba si el ID del servidor se encuentra en este archivo para no hacer 
+# la copia de seguridad
+function ignore_server($VeId)
+{
+  if (file_exists(VZDUMP_EXCLUDES) == false){
+    return false;}
+  $contents = file_get_contents(VZDUMP_EXCLUDES);
+  $pattern = "$VeId";
+  $pattern = "/^.*$pattern.*\$/m";
+  if(preg_match_all($pattern, $contents, $matches)){
+      return true;}
+  else{
+	    return false;}
+}
+?>
