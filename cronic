@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Cronic v2 - cron job report wrapper
+# Copyright 2007 Chuck Houpt
+
+set -eu
+
+OUT=/tmp/cronic.out.$$
+ERR=/tmp/cronic.err.$$
+TRACE=/tmp/cronic.trace.$$
+
+set +e
+"$@" >$OUT 2>$TRACE
+RESULT=$?
+set -e
+
+PATTERN="^${PS4:0:1}\\+${PS4:1}"
+if grep -aq "$PATTERN" $TRACE
+then
+    ! grep -av "$PATTERN" $TRACE > $ERR
+else
+    ERR=$TRACE
+fi
+
+if [ $RESULT -ne 0 -o -s "$ERR" ]
+    then
+    echo "Cronic ha detectado errores:"
+    echo "$@"
+    echo
+    echo "CóDIGO DE SALIDA: $RESULT"
+    echo
+    echo "SALIDA DE ERROR:"
+    cat "$ERR"
+    echo
+    echo "SALIDA ESTÁNDAR:"
+    cat "$OUT" | sed -r "s/\x1B\[([0-9]{1,3}((;[0-9]{1,3})*)?)?[m|K]//g"
+    if [ $TRACE != $ERR ]
+    then
+        echo
+        echo "SALIDA DE TRACE:"
+        cat "$TRACE"
+    fi
+fi
+
+rm -f "$OUT"
+rm -f "$ERR"
+rm -f "$TRACE"

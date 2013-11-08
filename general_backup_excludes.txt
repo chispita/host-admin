@@ -1,0 +1,9 @@
+/proc
+/sys
+/dev
+/tmp
+/mnt
+/backup
+/vz
+/var/lib/vz/root
+/proc
