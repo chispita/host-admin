@@ -1,0 +1,18 @@
+#!/bin/bash
+
+# Acceso directo a servicios:
+
+if [ "$1" == "" ]
+then
+	echo -e "Ejemplo de uso:\n  rc nagios restart\n"
+	exit 1
+fi
+
+if [ -f /etc/init.d/$1 ]
+then
+	/etc/init.d/$1 $2
+else
+	echo "No existe el servicio $1."
+	exit 1
+fi
+

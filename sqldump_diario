@@ -1,0 +1,8 @@
+#!/bin/bash
+
+echo "DEPRECATED: Por favor, utilize el nuevo sistema: "
+echo
+echo "vz sqldump"
+echo
+exit 1
+
