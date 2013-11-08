@@ -1,0 +1,129 @@
+#!/usr/bin/php -q
+<?php
+
+##################################################
+#                                                #
+# queru-apache-logs                              #
+# Maneja el log empipado de apache.         	 #
+# queru@queru.org                                #
+#                                                #
+##################################################
+
+/*
+    Recibe desde stdin el log.
+*/
+
+
+# Quitar errores en html:
+ini_set("html_errors", false);
+# Que no se detenga la ejecución por tiempo:
+set_time_limit(0);
+
+# Conexión con BDD:
+$dbcon = @mysql_connect("mysql.maz.es", "root", "my16384") or error("Error de conexión: " . mysql_error());
+Decir("START: Conectado con la BDD.", false);
+
+$handle = fopen("php://stdin", "r");
+while (!feof($handle))
+{
+	$buffer = fgets($handle);
+	if ($buffer != false)
+	{
+		list($login, $pass) = split(" ", $buffer, 2);
+		$login = trim($login);
+		$pass = trim($pass);
+
+		# Comprueba parámetros mínimos:
+		if (empty($login) or empty($pass))
+		{
+			Decir("ERR ".$login." Usuario o contraseña en blanco.");
+		}
+		else if ($login=="escala2" and $pass=="esc43pdd-p-auth")
+		{
+			# Autorización para wget del Escala2.
+			Decir("OK".$login);
+		}
+		else
+		{
+			# Consulta en la BDD:
+			# ¿Existe y la contraseña es correcta?
+			$query = "	SELECT COUNT(*) 
+						FROM usuarios.usus
+						WHERE login = '".$login."'
+						and clearpass = '".$pass."';";
+						
+			$result = MySQL_Query($query)
+						or error("Query: ".Mysql_Error());
+										
+    	   		 if (mysql_result($result,0) == 0)
+			{
+				Decir("ERR ".$login."//".$pass." Nombre de usuario o contraseña incorrectos.");
+			}
+			else
+			{
+				# Nombre de usuario y contraseña correctos.
+				# Comprobar si la cuenta está bloqueda:
+				$result = MySQL_Query("SELECT COUNT(*) FROM usuarios.usus WHERE login = '".$login."' "
+							."and clearpass = '".$pass."' and bloqueo = 'si';")
+							or error("Query: ".Mysql_Error());
+							
+				if (mysql_result($result,0) != 0)
+    	            	{
+    	                    	Decir("ERR ".$login." Cuenta bloqueada.");
+    	            	}
+				else
+				{
+					# La cuenta no está bloqueda.
+					# ¿Tiene permiso usumaz?
+					$result = MySQL_Query("SELECT COUNT(*) FROM usuarios.acl WHERE usuario = '".$login."' and "
+											."permiso = 'usumaz';")
+								or error("Query: ".Mysql_Error());
+								
+    	            		if (mysql_result($result,0) == 0)
+    	            		{
+    	                    		# No tiene permiso usumaz:
+    	                    		Decir("ERR ".$login." No tiene permiso usumaz.");
+    	            		}
+					else
+					{
+						# Cuenta OK:
+						Decir("OK ".$login);
+					}
+				}
+			}
+		}
+	}
+}
+
+# Cerrar BDD:
+MySQL_Close($dbcon);
+
+?>
+<?php
+
+/* --------------------
+   FUNCIONES AUXILIARES
+   -------------------- */
+
+# Muestra un error y muere:
+function error($texto)
+{
+	Decir("ERR **ERROR GRAVE** ".$texto);
+	die(2);
+}
+
+# Escribe en stdout y además en el log:
+function Decir($texto, $echo=true)
+{
+	# Abre fichero de logs:
+	$hLog = fopen("/var/log/squid/squid-MAZ-Auth.log", "a");
+	fWrite($hLog, "[".date("d-m-Y@h:i:s")."] ".$texto."\n");
+	fclose($hLog);
+	if ($echo)
+	{
+		echo $texto."\n";
+	}
+	flush();
+}
+
+?>

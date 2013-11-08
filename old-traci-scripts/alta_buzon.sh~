@@ -1,0 +1,14 @@
+#!/bin/bash
+
+# Alta de un buzón de correo:
+
+
+echo    "USE cqtraci; \
+	 INSERT INTO alias (address, goto, domain, created, modified, active) \
+		VALUES ('$BUZON@$DOM','$BUZON@$DOM','$DOM',NOW(),NOW(),1); \
+	 INSERT INTO mailbox (username, password, name, maildir, quota, domain, created, modified, active) \
+		VALUES ('$BUZON@$DOM','$PASS','$BUZON','$DOM/$BUZON/',104857600,'$DOM',NOW(),NOW(),1);" | mysql
+		
+echo "Buzón activado." | mail -s "Activación de buzón." $BUZON@$DOM
+
+echo -e $AZUL"\n> Finalizado.$NORMAL\n"

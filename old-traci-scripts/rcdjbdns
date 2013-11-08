@@ -1,0 +1,209 @@
+#!/bin/sh
+
+##########################################
+# Script de control de djbdns.           #
+# queru@qaop.com                         #
+##########################################
+
+# Colores:
+source /usr/local/admin/colores.inc
+
+case "$1" in
+  edit)
+    if [ "$2" == "" ]
+    then
+	echo -e $ROJO"¿Qué dominio?"$NORMAL
+    else
+	vi /service/tinydns/root/dominios-qaop/$2
+	echo -e $VERDE"No olvide hacer un remake."$NORMAL
+	echo -e $BLANCO"¿Desea efetuar un 'remake' ahora? (s/N):"$NORMAL" \c"
+	read -n1 SN
+	echo " "
+	if [ "$SN" == "s" ]
+	then
+		echo "Recompilando fichero de datos..."
+       	 	/service/tinydns/root/compilacdb.sh
+	    	echo "Enviando señal HUP a dnscache."
+	        svc -h /service/dnscache
+		echo "Enviando señal HUP a tinydns."
+		svc -h /service/tinydns
+	fi
+    fi
+    ;;
+  start)
+    echo "Iniciando djbdns: svscan"
+    if svok /service/dnscache ; then
+      svc -u /service/dnscache
+    else
+      echo dnscache supervise not running
+    fi
+    if svok /service/tinydns ; then
+      svc -u /service/tinydns
+    else
+      echo tinydns supervise not running
+    fi
+    ;;
+  stop)
+    echo "Deteniendo djbdns..."
+    echo "  dnscache"
+    svc -d /service/dnscache
+    echo "  tinydns"
+    svc -d /service/tinydns
+    ;;
+  status)
+    echo -e $CYAN"---=[ESTADO DE DJBDNS]=---"$NORMAL
+    echo -e "- "$BLANCO"dnscache.:"$NORMAL" \c"
+    svstat /service/dnscache
+    echo -e "- "$BLANCO"tinydns..:"$NORMAL" \c"
+    svstat /service/tinydns
+    echo -e $CYAN"-------------------------"$NORMAL
+    ;;
+  reload|hup)
+    echo "Enviando señal HUP a dnscache."
+    svc -h /service/dnscache
+    echo "Enviando señal HUP a tinydns."
+    svc -h /service/tinydns
+    ;;
+  pause)
+    echo "Congelando dnscache"
+    svc -p /service/dnscache
+    echo "Congelando tinydns"
+    svc -p /service/tinydns
+    ;;
+  cont)
+    echo "Reanudando dnscache"
+    svc -c /service/dnscache
+    echo "Reanudando tinydns"
+    svc -c /service/tinydns
+    ;;
+  restart)
+    echo "Reiniciando djbdns:"
+    echo "* Deteniendo dnscache."
+    svc -d /service/dnscache
+    echo "* Deteniendo tinydns."
+    svc -d /service/tinydns
+    echo "* Iniciando dnscache:"
+    svc -u /service/dnscache
+    echo "* Iniciando tinydns:"
+    svc -u /service/tinydns
+    ;;
+  cdb)
+    echo "Recompilando fichero de datos..."
+    /service/tinydns/root/compilacdb.sh
+    ;;
+  remake)
+    echo "Recompilando fichero de datos..."
+    /service/tinydns/root/compilacdb.sh
+    echo "Enviando señal HUP a dnscache."
+    svc -h /service/dnscache
+    echo "Enviando señal HUP a tinydns."
+    svc -h /service/tinydns
+    ;;
+  verdom)
+    echo -e $VERDE"---=([$2])=---"$NORMAL
+    echo -e $BLANCO"------------------------------------------------------------------------------"$NORMAL
+    echo -e $CYAN"\c"
+    cat /service/tinydns/root/data|grep $2|grep -v "#"
+    echo -e $BLANCO"------------------------------------------------------------------------------"$NORMAL
+    echo "Extraído de dominios en producción. Si no ha hecho 'remake' el dominio no aparecerá."
+    ;;
+  wdom)
+    if [ "$2" == "" ]
+    then
+    	echo -e "\n"$ROJO"Falta nombre de dominio (ejemplo.net)."$NORMAL"\n"
+	exit 1
+    fi	
+
+    if [ "$3" == "" ]
+    then
+    	echo " "
+    	echo -e $ROJO"Falta la dirección IP del dominio."$NORMAL
+	IP="194.143.194.244"
+	echo "Poniendo por defecto la $IP"
+	echo " "
+	sleep 2
+    else
+    	IP=$3
+    fi
+    DOMTMP=/tmp/$2
+    cat /dev/null > $DOMTMP
+    echo "# ---------------------------------------------------------------" >> $DOMTMP
+    echo "# DOMINIO: $2" >> $DOMTMP
+    echo "# ---------------------------------------------------------------" >> $DOMTMP
+    echo "Z"$2":ns1.qaop.com:hostmaster.qaop.com" >> $DOMTMP
+    echo "."$2"::ns1.qaop.com" >> $DOMTMP
+    echo "."$2"::ns2.qaop.com" >> $DOMTMP
+    echo "+"$2":$IP" >> $DOMTMP
+    echo "+antivirus."$2":$IP" >> $DOMTMP
+    echo "+mysql."$2":$IP" >> $DOMTMP
+    echo "+pop3."$2":$IP" >> $DOMTMP
+    echo "+smtp."$2":$IP" >> $DOMTMP
+    echo "+www."$2":$IP" >> $DOMTMP
+    echo "@"$2":$IP:correo."$2 >> $DOMTMP
+    echo "+*."$2":$IP" >> $DOMTMP
+    echo "'"$2":www.conectahosting.com" >> $DOMTMP
+    echo -e $CYAN"Ejemplo del dominio:"$NORMAL
+    cat $DOMTMP
+    echo -e $CYAN"<EOF>"$NORMAL"\n"
+    if [ -f /service/tinydns/root/dominios-qaop/$2 ]
+    then
+	echo -e $AMARILLO"¡CUIDADO! El fichero de dominio ya existe:"$NORMAL
+	rcdjbdns verdom $2
+	echo -e $BLANCO"¿Desea "$ROJO"SOBREESCRIBIR"$BLANCO" el fichero de dominio? (S/n):"$NORMAL" \c"
+    else
+	echo -e $BLANCO"¿Desea escribir el fichero de dominio? (S/n):"$NORMAL" \c"
+    fi
+    read -n1 SN
+    echo " "
+    if [ "$SN" != "n" ]
+    then
+	echo -e $VERDE"Escribiendo /service/tinydns/root/dominios-qaop/"$2"."$NORMAL
+    	cp $DOMTMP /service/tinydns/root/dominios-qaop/$2
+	echo -e $VERDE"No olvide hacer un remake."$NORMAL
+	echo -e $BLANCO"¿Desea efetuar un 'remake' ahora? (s/N):"$NORMAL" \c"
+	read -n1 SN
+	echo " "
+	if [ "$SN" == "s" ]
+	then
+		echo "Recompilando fichero de datos..."
+       	 	/service/tinydns/root/compilacdb.sh
+	    	echo "Enviando señal HUP a dnscache."
+	        svc -h /service/dnscache
+		echo "Enviando señal HUP a tinydns."
+		svc -h /service/tinydns
+	fi
+    else 
+	echo "El fichero no ha sido escrito."
+    fi
+    rm -f $DOMTMP &> /dev/null
+    ;;
+  list)
+    echo -e $VERDE"Listado de dominios:"$NORMAL
+    ls -A /service/tinydns/root/dominios-qaop
+    echo -e $ROJO"<EOF>"$NORMAL
+    ;;
+  help)
+    cat <<HELP
+   stop -- Detiene djbdns.
+  start -- Inicia djbdns.
+  pause -- Temporalmente congela el servicio de dns.
+   cont -- Continua con el servicio de dns antes congelado.
+ status -- Muestra el estado del servicio.
+    cdb -- Reconstruye el fichero de datos cdb.
+restart -- Detiene y reinicia el servicio.
+ reload -- Envía un HUP a los demonios.
+   edit -- Editar el fichero de zonas.
+ remake -- cdb + reload.
+    hup -- Lo mismo que reload.
+ verdom -- Muestra los datos de un dominio.
+   wdom -- Escribe por pantalla conf. típica de dominio dado.
+   list -- Lista todos los dominios.
+HELP
+    ;;
+  *)
+    echo "Utilización: $0 {start|stop|restart|reload|status|pause|cont|cdb|remake|edit|verdom|wdom|help}"
+    exit 1
+    ;;
+esac
+
+exit 0

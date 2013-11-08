@@ -1,0 +1,106 @@
+#!/usr/bin/php 
+<?php
+
+/* Manejo de hosting para Conectahosting.com
+ * Necesita los siguientes paquetes de pear-php:
+ * Console_Color, Console_Table
+ */
+
+// Inicialización:
+require("hosting-include/config.inc.php");
+require("hosting-include/constantes.inc.php");
+
+// Autocarga de clases:
+function __autoload($class_name)
+{
+	require_once INCLUDEDIR."/".$class_name.".class.php";
+}
+
+
+# ---------------[ FUNCIONES: ]---------------
+// Enviar texto a la consola:
+# Colores:
+# http://www.pear.php.net/manual/en/package.console.console-color.colorcodes.php
+require_once 'Console/Color.php';
+function decir($txt = "", $rtns = 1)
+{
+  echo Console_Color::Convert($txt);
+  // Saltos de línea, por defecto 1:
+  for ($i = 1; $i <= $rtns; $i++)
+    {
+      echo "\n";
+    }
+}
+
+// Inputs:
+function input($desc = "Introduzca: ", $defecto = "")
+{
+  Decir("%g>%n ".$desc." (".$defecto."): ", 0);
+  $input = Consola::GetInput(256);
+  if(empty($input))
+    {
+      return $defecto;
+    }
+  return $input;
+}
+# ---------------[ FIN FUNCIONES: ]---------------
+
+// Lista de acciones:
+$aAcciones = scandir(INCLUDEDIR);
+foreach($aAcciones as $key => $accion)
+{
+	if(!ereg("^Hosting\_.*\.inc\.php$", $accion))
+	{
+		unset($aAcciones[$key]);
+	}
+	else
+	{
+		$filename = split("\.", $aAcciones[$key]);
+		$aAcciones[$key] = substr($filename[0], 8);
+	}
+}
+
+// Argumentos. Si no hay acción se pide.
+if($_SERVER['argc'] < 2)
+{
+	decir("Debe especificar una de las siguientes acciones:", 2);
+	foreach($aAcciones as $accion)
+	{
+		if(!empty($acciones))
+		{
+			$acciones .= ", ".$accion;
+		}
+		else
+		{
+			$acciones = "\t".$accion;
+		}
+	}
+	decir($acciones.".", 2);
+	exit(0);
+}
+else
+{
+	$accion = $_SERVER['argv'][1];
+}
+
+// Pillar el segundo argumento como el dominio:
+if(!empty($_SERVER['argv'][2]))
+{
+	$VE = $_SERVER['argv'][2];
+}
+
+// Ejecutar acción:
+if(file_exists(INCLUDEDIR."/Hosting_".$accion.".inc.php"))
+{
+	require_once INCLUDEDIR."/Hosting_".$accion.".inc.php";
+}
+else
+{
+	ERROR::Warn("No existe la acción '%r".$accion."%n'.", SALIR);
+}
+
+
+# ---------------[ FIN PROGRAMA: ]---------------
+exit(0);
+
+?>

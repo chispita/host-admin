@@ -1,0 +1,23 @@
+# ------------------------------------------------------
+#
+# Lista de directorios para los que efectuar
+# copia de respaldo en este host.
+#
+# queru@qaop.com - Julio 2004.
+#
+# Poner simplemente un directorio, con PATH completo
+# en cada línea. Se pueden poner comentarios: cualquier
+# línea conteniendo una '#'.
+#
+# Se permiten las líneas en blanco.
+#
+# ------------------------------------------------------
+
+/etc
+/usr/local
+/boot
+/web
+/home
+/var/tinydns
+/var/lib/mysql
+
