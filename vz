@@ -1,0 +1,107 @@
+#!/usr/bin/php
+<?php
+
+/* Manejo de entornos virtuales OpenVZ:
+ * Necesita los siguientes paquetes de pear-php:
+ * Console_Color, 
+ * sistemas@conectahosting.es
+ */
+
+// Autocarga de clases:
+function __autoload($class_name) {
+    require_once INCLUDEDIR."/".$class_name.".class.php";
+}
+
+// Enviar texto a la consola:
+# Colores:
+# http://www.pear.php.net/manual/en/package.console.console-color.colorcodes.php
+require_once 'Console/Color.php';
+function decir($txt = "", $rtns = 1)
+{
+	Consola::decir($txt, $rtns);
+}
+
+// Inicialización:
+require("include/vzinc/config.inc.php");
+require("include/vzinc/constantes.inc.php");
+
+// Inputs:
+function input($desc = "Introduzca: ", $defecto = "")
+{
+  Decir("%g>%n ".$desc." (".$defecto."): ", 0);
+  $input = Consola::GetInput(256);
+  if(empty($input))
+    {
+      return $defecto;
+    }
+  return $input;
+}
+
+// Lista de acciones:
+$aAcciones = scandir(INCLUDEDIR);
+foreach($aAcciones as $key => $accion)
+{
+  if(substr($accion, 0, 6) != "CmdVz_") 
+    {
+      unset($aAcciones[$key]);
+    }
+  else
+    {
+      $filename = split("\.", $aAcciones[$key]);
+      $aAcciones[$key] = substr($filename[0], 6);
+    }
+}
+
+// Argumentos. Si no hay acción se pide.
+if($_SERVER['argc'] < 2)
+  {
+    decir("Debe especificar una de las siguientes acciones:", 2);
+    foreach($aAcciones as $accion)
+      {
+	if(!empty($acciones))
+	  {
+	    $acciones .= ", ".$accion;
+	  }
+	else
+	  {
+	    $acciones = "\t".$accion;
+	  }
+      }
+    decir($acciones.".", 2);
+    exit(0);
+  }
+else
+  {
+    $accion = $_SERVER['argv'][1];
+  }
+
+// Pillar el segundo argumento como ID de la VE o como opción:
+if(!empty($_SERVER['argv'][2]))
+{
+	if(is_numeric($_SERVER['argv'][2]))
+	{
+		$VE = $_SERVER['argv'][2];
+		if(!is_numeric($VE)) ERROR::Warn("El ID de la VE debe ser numérico (1-253).", SALIR);
+		if($VE < VEID_MIN or $VE > Cidr::getMaxHosts()) ERROR::Warn("El ID debe estar comprendido entre "
+			.VEID_MIN." y ".Cidr::getMaxHosts().", ambos inclusive.", SALIR);
+	}
+  	else
+  	{
+  		$OPC = $_SERVER['argv'][2];
+  	}
+}
+
+// Ejecutar acción:
+if(file_exists(INCLUDEDIR."/CmdVz_".$accion.".inc.php"))
+{
+	require_once INCLUDEDIR."/CmdVz_".$accion.".inc.php";
+}
+else
+{
+	ERROR::Warn("No existe la acción '%r".$accion."%n'.", SALIR);
+}
+
+// Fin del programa:
+exit(0);
+
+?>
